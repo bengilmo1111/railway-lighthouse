@@ -1,6 +1,6 @@
 import express from 'express';
 import lighthouse from 'lighthouse';
-import { launch } from 'chrome-launcher';
+import puppeteer from 'puppeteer';
 import cors from 'cors';
 
 const app = express();
@@ -9,17 +9,22 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 
 async function runLighthouse(url) {
-  const chrome = await launch({ chromeFlags: ['--headless', '--no-sandbox', '--disable-gpu'] });
+  const browser = await puppeteer.launch({
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+
+  const chromePort = (new URL(browser.wsEndpoint())).port;
+
   const options = {
     logLevel: 'info',
     output: 'json',
-    port: chrome.port,
+    port: chromePort,
     emulatedFormFactor: 'desktop',
     maxWaitForLoad: 60000,
   };
 
   const runnerResult = await lighthouse(url, options);
-  await chrome.kill();
+  await browser.close();
 
   return runnerResult.lhr;
 }
@@ -34,11 +39,11 @@ function convertToCSV(data) {
   return rows.join('\n');
 }
 
-// Static list of URLs (update as needed)
+// Static list of URLs
 const urls = [
   'https://central.xero.com/s/',
   'https://central.xero.com/s/topiccatalog',
-  // Add your full list of URLs here
+  // Add additional URLs as needed
 ];
 
 app.get('/run-lighthouse', async (req, res) => {
@@ -66,6 +71,10 @@ app.get('/run-lighthouse', async (req, res) => {
   res.header('Content-Type', 'text/csv');
   res.attachment('lighthouse-results.csv');
   res.send(csvString);
+});
+
+app.get('/', (req, res) => {
+  res.send('🚀 Railway Lighthouse API is running!');
 });
 
 app.listen(PORT, () => {
